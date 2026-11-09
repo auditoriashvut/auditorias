@@ -1,8 +1,9 @@
 /* Auditorías HVUT — funcionamiento sin internet */
-var CACHE="auditorias-hvut-v2";
+var CACHE="auditorias-hvut-v3";
 var LOCAL=["./","index.html","manifest.webmanifest","icon-192.png","icon-512.png"];
 var CDN=["https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
-         "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"];
+         "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js",
+         "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"];
 self.addEventListener("install",function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){
     return c.addAll(LOCAL).then(function(){return Promise.all(CDN.map(function(u){return fetch(u,{mode:"cors"}).then(function(r){return c.put(u,r);}).catch(function(){});}));});
