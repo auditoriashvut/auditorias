@@ -676,6 +676,10 @@ function cargarExcelJS(){if(window.ExcelJS)return Promise.resolve();return new P
 function fechaD(iso){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||"");return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],12)):null;}
 function textoFiltro(){var F=S.fil||{},p=[];if(F.carpeta)p.push(F.carpeta);if(F.formato)p.push(F.formato);
   if(F.desde||F.hasta)p.push((F.desde?mesTxt(F.desde):"inicio")+" a "+(F.hasta?mesTxt(F.hasta):"hoy"));if(F.evaluado)p.push(F.evaluado);if(F.evaluador)p.push("Auditor(a): "+F.evaluador);return p.join(" · ")||"Todas las auditorías";}
+function coloresPct(ws,ref){ws.addConditionalFormatting({ref:ref,rules:[
+      {type:"cellIs",operator:"greaterThan",priority:1,formulae:["0.99999"],style:{fill:{type:"pattern",pattern:"solid",bgColor:{argb:"FF00FF00"}}}},
+      {type:"cellIs",operator:"between",priority:2,formulae:["0.8","0.99999"],style:{fill:{type:"pattern",pattern:"solid",bgColor:{argb:"FFFF9900"}}}},
+      {type:"cellIs",operator:"lessThan",priority:3,formulae:["0.8"],style:{fill:{type:"pattern",pattern:"solid",bgColor:{argb:"FFFF0000"}}}}]});}
 function exportarExcel(){var rows=filtrar(filasRegistro(),"mes");if(!rows.length)return;toast("Preparando el Excel…",15000);
   cargarExcelJS().then(function(){var wb=new ExcelJS.Workbook();wb.creator="Auditoría y Control Interno – HVUT";wb.created=new Date();
     var logo=wb.addImage({base64:LOGO_B64,extension:"png"}),GR="FF404040",LG="FFE7E6E6",BD={style:"thin",color:{argb:"FFBFBFBF"}},BORDE={top:BD,left:BD,bottom:BD,right:BD};
@@ -702,7 +706,7 @@ function exportarExcel(){var rows=filtrar(filasRegistro(),"mes");if(!rows.length
     var orden=rows.slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha));});
     orden.forEach(function(r,i){fila(ws,6+i,[i+1,fechaD(r.fecha),r.carpeta,r.formato,r.evaluado,r.extra||"",r.evaluador||"",pct(r.pct),bajoMeta(r)?"Bajo la meta":"Cumple la meta",nc[r.id]||0,r.obsGeneral||"",
       r.pdf?{text:"Ver PDF",hyperlink:r.pdf}:"Pendiente",r.evid?{text:"Ver fotos",hyperlink:r.evid}:""],["c","c","","","","","","%","c","c","","c","c"]);});
-    var fin=5+orden.length;ws.autoFilter={from:{row:5,column:1},to:{row:fin,column:13}};
+    var fin=5+orden.length;ws.autoFilter={from:{row:5,column:1},to:{row:fin,column:13}};coloresPct(ws,"H6:H"+fin);
     var pr=ws.getRow(fin+2);pr.getCell(7).value="Promedio";pr.getCell(7).font={name:"Arial",size:10,bold:true};
     var D=datosIndicadores(rows);pr.getCell(8).value={formula:"AVERAGE(H6:H"+fin+")",result:D.prom};pr.getCell(8).numFmt="0.0%";pr.getCell(8).font={name:"Arial",size:10,bold:true};pr.getCell(8).alignment={horizontal:"center"};
     pr.getCell(8).fill={type:"pattern",pattern:"solid",fgColor:{argb:LG}};pr.getCell(7).fill={type:"pattern",pattern:"solid",fgColor:{argb:LG}};
@@ -718,13 +722,13 @@ function exportarExcel(){var rows=filtrar(filasRegistro(),"mes");if(!rows.length
     var bajos=orden.filter(bajoMeta);
     bajos.forEach(function(r,i){var p=planDe(r.id)||{},hh=hall.filter(function(h){return h.id===r.id&&h.resultado!=="Cumple";}).map(function(h){return h.n+". "+h.texto+(h.obs?" ("+h.obs+")":"");}).join("\n");
       fila(wp,6+i,[fechaD(r.fecha),r.formato,r.evaluado,pct(r.pct),metaDe(r),hh,p.factor||"",p.responsable||"",fechaD(p.fecha),p.estado||"Sin plan",p.seguimiento||""],["c","","","%","%","","","","c","c",""]);});
-    if(bajos.length)wp.autoFilter={from:{row:5,column:1},to:{row:5+bajos.length,column:11}};else wp.getCell(6,1).value="Ninguna auditoría quedó por debajo de la meta en el periodo.";
+    if(bajos.length){wp.autoFilter={from:{row:5,column:1},to:{row:5+bajos.length,column:11}};coloresPct(wp,"D6:D"+(5+bajos.length));}else wp.getCell(6,1).value="Ninguna auditoría quedó por debajo de la meta en el periodo.";
     /* Indicadores */
     var wi=hoja("Indicadores","INDICADORES DE CUMPLIMIENTO",[40,13,13,15,4]);var y=5;
     encab(wi,y,["Indicador","Valor","",""]);wi.getRow(y).getCell(5).value=null;
     [["Auditorías realizadas",D.n,""],["Cumplimiento promedio",D.prom,"%"],["Auditorías bajo la meta ("+fmtPct(metaGeneral())+")",D.bajos,""],["Planes de mejora sin cerrar",D.abiertos,""]].forEach(function(x){y++;fila(wi,y,[x[0],x[1]],["",x[2]==="%"?"%":"c"]);});
     function bloque(t,etq,gs,fk){if(!gs.length)return;y+=2;wi.getCell(y,1).value=t;wi.getCell(y,1).font={name:"Arial",size:11,bold:true};y++;
-      encab(wi,y,[etq,"Auditorías","Bajo la meta","Promedio"]);gs.forEach(function(g){y++;fila(wi,y,[fk?fk(g.k):g.k,g.n,g.bajo,g.prom],["","c","c","%"]);});}
+      encab(wi,y,[etq,"Auditorías","Bajo la meta","Promedio"]);var y0=y+1;gs.forEach(function(g){y++;fila(wi,y,[fk?fk(g.k):g.k,g.n,g.bajo,g.prom],["","c","c","%"]);});coloresPct(wi,"D"+y0+":D"+y);}
     bloque("Por servicio","Servicio",D.servicio);bloque("Por mes","Mes",D.mes,function(m){var t=mesTxt(m);return t.charAt(0).toUpperCase()+t.slice(1);});
     bloque("Por lista de chequeo","Lista de chequeo",D.lista);bloque("Por evaluado o área","Evaluado / área",D.evaluado);bloque("Por auditor(a)","Auditor(a)",D.auditor);
     if(D.fallas.length){y+=2;wi.getCell(y,1).value="Fallas más frecuentes";wi.getCell(y,1).font={name:"Arial",size:11,bold:true};y++;encab(wi,y,["Ítem (lista de chequeo)","Veces","Evaluados",""]);
@@ -766,7 +770,7 @@ function exportarResumen(){var rows=filtrar(filasRegistro(),"mes");if(!rows.leng
     wb1.columns=[5,11.5,16,30,18,24,13,40,16,24].map(function(w){return {width:w};});
     encab(wb1,1,["N°","Fecha","Paciente HC","Auditoría","Tipo de auditoría","Auditado","% cumplimiento","Observaciones","Auditor","Semana"]);
     datos.forEach(function(d,i){celdas(wb1,2+i,[i+1,d.fecha,d.pac,d.aud,d.tipo,d.evaluado,d.pct,d.obs,d.auditor,d.semana],6);});
-    var fin=1+datos.length;wb1.autoFilter={from:{row:1,column:1},to:{row:fin,column:10}};colores(wb1,"G2:G"+fin);
+    var fin=1+datos.length;wb1.autoFilter={from:{row:1,column:1},to:{row:fin,column:10}};colores(wb1,"G2:G"+fin);var lg=wb1.getCell(fin+2,4);lg.value="Código de color del % de cumplimiento: verde 100 %; naranja 80 % a 99,9 %; rojo menor a 80 % (se puede cambiar en Formato condicional).";lg.font={name:"Arial",size:9,italic:true};
     /* Una pestaña por médico (o persona evaluada) */
     var gente=((S.conf&&S.conf.personal)||[]).filter(function(p){return p.auditado;}).map(function(p){return p.nombre;}),usadas={};
     gente.forEach(function(nombre){var k=sinT(nombre),suyas=datos.filter(function(d){return sinT(d.evaluado).indexOf(k)>=0;});if(!suyas.length)return;
