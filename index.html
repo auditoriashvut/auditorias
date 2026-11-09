@@ -668,7 +668,9 @@ function vExportar(){var todas=filasRegistro(),rows=filtrar(todas,"mes");
   app.innerHTML=cabecera("Exportar a Excel","Descarga con los filtros que elija")+sinDatosHtml()+filtrosHtml(todas,true)+
     '<section class="panel"><h3>'+rows.length+(rows.length===1?' auditoría':' auditorías')+' para exportar</h3>'+
     '<p class="small muted">El archivo trae cuatro hojas: Registro (una fila por auditoría, con enlace al PDF y a las fotos), Hallazgos (cada ítem no cumplido y sus observaciones), Planes de mejora e Indicadores. Formato en negro y gris, letra Arial, con el logo de la Universidad.</p>'+
-    '<div class="row"><button type="button" class="pri" data-act="excel"'+(rows.length?'':' disabled')+'>Descargar Excel</button></div></section>';}
+    '<div class="row"><button type="button" class="pri" data-act="excel"'+(rows.length?'':' disabled')+'>Descargar Excel</button></div></section>'+
+    '<section class="panel"><h3>Formato Resumen de auditorías</h3><p class="small muted">Igual al Resumen de Auditorías 2026: una hoja con todas las auditorías (N°, fecha, paciente HC, auditoría, tipo, auditado, % cumplimiento, observaciones, auditor y semana) y una pestaña por cada médico. El % trae el código de color: verde 100 %, naranja de 80 % a 99,9 % y rojo menor a 80 %.</p>'+
+    '<div class="row"><button type="button" class="pri" data-act="excelres"'+(rows.length?'':' disabled')+'>Descargar Resumen por médico</button></div></section>';}
 function cargarExcelJS(){if(window.ExcelJS)return Promise.resolve();return new Promise(function(res,rej){var sc=document.createElement("script");
   sc.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";sc.onload=function(){res();};sc.onerror=function(){rej(new Error("No se pudo cargar el generador de Excel. Abra la app una vez con internet."));};document.head.appendChild(sc);});}
 function fechaD(iso){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||"");return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],12)):null;}
@@ -733,6 +735,57 @@ function exportarExcel(){var rows=filtrar(filasRegistro(),"mes");if(!rows.length
     l.href=url;l.download=nom;document.body.appendChild(l);l.click();l.remove();setTimeout(function(){URL.revokeObjectURL(url);},8000);toast("Excel descargado: "+nom,5000);})
   .catch(function(e){toast((e&&e.message)||"No se pudo generar el Excel.",6000);});}
 
+/* ===================== Exportar como el Resumen (bitácora + una pestaña por médico) ===================== */
+function sinT(s){return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();}
+function semanaDe(iso){var d=fechaD(iso);if(!d)return "";var dow=(d.getUTCDay()+6)%7,l=new Date(d.getTime()-dow*864e5),s=new Date(l.getTime()+5*864e5);
+  function dm(x){return ("0"+x.getUTCDate()).slice(-2)+"/"+("0"+(x.getUTCMonth()+1)).slice(-2);}return "Semana del "+dm(l)+" al "+dm(s);}
+function tipoDe(f){var t=sinT(f);if(/factur/.test(t))return "Facturación";if(/bioseg/.test(t))return "Bioseguridad";if(/historia cl/.test(t))return "Historia clínica";
+  if(/adherencia/.test(t))return "Adherencias";if(/recibo de turno|entrega y recibo/.test(t))return "Entrega y recibo de turno";return f||"";}
+function pacienteDe(r){return String(r.extra||"").split(" · ").filter(function(p){return /^(paciente|hc|n° ?hc|historia|especie)/i.test(p.trim());})
+  .map(function(p){return p.replace(/^(paciente|hc|n° ?hc|historia clínica|historia)\s*:\s*/i,"").trim();}).filter(String).join(" ");}
+var TRATO={juliana:"Dra.",yuliana:"Dra.",miguel:"Dr.",julio:"Dr.",luisa:"Dra.",guerly:"Dra.",andrea:"Dra.",andres:"Dr.",marcela:"Dra.",catalina:"Dra.",michael:"Dr.",nathaly:"Dra.",isabela:"Dra.",carolina:"Dra.",daniel:"Dr."};
+function exportarResumen(){var rows=filtrar(filasRegistro(),"mes");if(!rows.length)return;toast("Preparando el Resumen…",15000);
+  cargarExcelJS().then(function(){var wb=new ExcelJS.Workbook();wb.creator="Auditoría y Control Interno – HVUT";wb.created=new Date();
+    var GR="FF404040",BD={style:"thin",color:{argb:"FFBFBFBF"}},BORDE={top:BD,left:BD,bottom:BD,right:BD};
+    var hall=todosHallazgos(),porId={};hall.forEach(function(h){if(h.resultado==="No cumple"||h.resultado==="Parcial")(porId[h.id]=porId[h.id]||[]).push(h);});
+    function obsDe(r){if(r.obsGeneral)return r.obsGeneral;return (porId[r.id]||[]).map(function(h){return h.n+". "+h.texto+(h.obs?": "+h.obs:"");}).join("; ");}
+    var orden=rows.slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha));});
+    var datos=orden.map(function(r){return {semana:semanaDe(r.fecha),fecha:fechaD(r.fecha),pac:pacienteDe(r),aud:r.formato,tipo:tipoDe(r.formato),
+      evaluado:r.evaluado||"",pct:(r.pct===null||r.pct===undefined||r.pct==="")?null:Number(r.pct),obs:obsDe(r),auditor:r.evaluador||""};});
+    function encab(ws,fila,cols){var rw=ws.getRow(fila);cols.forEach(function(c,j){var cell=rw.getCell(j+1);cell.value=c;cell.font={name:"Arial",size:10,bold:true,color:{argb:"FFFFFFFF"}};
+      cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GR}};cell.alignment={vertical:"middle",horizontal:"center",wrapText:true};cell.border=BORDE;});rw.height=30;}
+    function celdas(ws,fila,vals,pctCol){var rw=ws.getRow(fila);vals.forEach(function(v,j){var cell=rw.getCell(j+1);cell.value=v===""?null:v;cell.font={name:"Arial",size:10};cell.border=BORDE;
+      cell.alignment={vertical:"top",wrapText:true};if(v instanceof Date){cell.numFmt="dd/mm/yyyy";cell.alignment.horizontal="center";}
+      if(j===pctCol){cell.numFmt="0.00%";cell.alignment.horizontal="center";}});}
+    function colores(ws,ref){ws.addConditionalFormatting({ref:ref,rules:[
+      {type:"cellIs",operator:"greaterThan",priority:1,formulae:["0.99999"],style:{fill:{type:"pattern",pattern:"solid",bgColor:{argb:"FF00FF00"}}}},
+      {type:"cellIs",operator:"between",priority:2,formulae:["0.8","0.99999"],style:{fill:{type:"pattern",pattern:"solid",bgColor:{argb:"FFFF9900"}}}},
+      {type:"cellIs",operator:"lessThan",priority:3,formulae:["0.8"],style:{fill:{type:"pattern",pattern:"solid",bgColor:{argb:"FFFF0000"}}}}]});}
+    /* Bitácora */
+    var wb1=wb.addWorksheet("Resumen",{views:[{state:"frozen",ySplit:1}]});
+    wb1.columns=[5,11.5,16,30,18,24,13,40,16,24].map(function(w){return {width:w};});
+    encab(wb1,1,["N°","Fecha","Paciente HC","Auditoría","Tipo de auditoría","Auditado","% cumplimiento","Observaciones","Auditor","Semana"]);
+    datos.forEach(function(d,i){celdas(wb1,2+i,[i+1,d.fecha,d.pac,d.aud,d.tipo,d.evaluado,d.pct,d.obs,d.auditor,d.semana],6);});
+    var fin=1+datos.length;wb1.autoFilter={from:{row:1,column:1},to:{row:fin,column:10}};colores(wb1,"G2:G"+fin);
+    /* Una pestaña por médico (o persona evaluada) */
+    var gente=((S.conf&&S.conf.personal)||[]).filter(function(p){return p.auditado;}).map(function(p){return p.nombre;}),usadas={};
+    gente.forEach(function(nombre){var k=sinT(nombre),suyas=datos.filter(function(d){return sinT(d.evaluado).indexOf(k)>=0;});if(!suyas.length)return;
+      var pri=k.split(" ")[0],trato=TRATO[pri]?TRATO[pri]+" ":"";
+      var tab=(trato+nombre).replace(/[\\\/\?\*\[\]:]/g," ").slice(0,31),n=2;while(usadas[tab])tab=tab.slice(0,29)+" "+(n++);usadas[tab]=1;
+      var ws=wb.addWorksheet(tab,{views:[{state:"frozen",ySplit:2}]});ws.columns=[24,11.5,16,30,18,24,13,40,16].map(function(w){return {width:w};});
+      ws.getCell(1,1).value="Reporte de auditorías – "+trato+nombre;ws.getCell(1,1).font={name:"Arial",size:12,bold:true};ws.getRow(1).height=20;
+      encab(ws,2,["Semana","Fecha","Paciente HC","Auditoría","Tipo de auditoría","Auditado","% cumplimiento","Observaciones","Auditor"]);
+      suyas.forEach(function(d,i){celdas(ws,3+i,[d.semana,d.fecha,d.pac,d.aud,d.tipo,d.evaluado,d.pct,d.obs,d.auditor],6);});
+      var f=2+suyas.length,p=ws.getRow(f+2);p.getCell(6).value="Promedio";p.getCell(6).font={name:"Arial",size:10,bold:true};
+      var vs=suyas.filter(function(d){return d.pct!==null;}),pr=vs.length?vs.reduce(function(s,d){return s+d.pct;},0)/vs.length:null;
+      p.getCell(7).value={formula:"AVERAGE(G3:G"+f+")",result:pr};p.getCell(7).numFmt="0.00%";p.getCell(7).font={name:"Arial",size:10,bold:true};p.getCell(7).alignment={horizontal:"center"};
+      colores(ws,"G3:G"+f);ws.autoFilter={from:{row:2,column:1},to:{row:f,column:9}};});
+    return wb.xlsx.writeBuffer();})
+  .then(function(buf){var blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),url=URL.createObjectURL(blob),l=document.createElement("a");
+    var nom=("Resumen de Auditorias - "+textoFiltro()+" - "+hoyISO()).normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^\w\- ]+/g," ").replace(/\s+/g," ").trim().slice(0,110)+".xlsx";
+    l.href=url;l.download=nom;document.body.appendChild(l);l.click();l.remove();setTimeout(function(){URL.revokeObjectURL(url);},8000);toast("Excel descargado: "+nom,5000);})
+  .catch(function(e){toast((e&&e.message)||"No se pudo generar el Excel.",6000);});}
+
 /* ===================== acciones de las vistas nuevas ===================== */
 function borrarLocal(){var host=$("#confirmLocal");if(S.confirm!=="borrarlocal"){S.confirm="borrarlocal";var pend=S.auds.filter(function(a){return a.estado==="finalizada"&&estadoSync(a)!=="subida";}).length;
     host.innerHTML='<div class="confirm"><b>¿Borrar las '+S.auds.length+' auditorías guardadas en esta tablet?</b>'+(pend?'<p>'+pend+' aún no se han subido a Drive y se perderán.</p>':'<p>Todas las finalizadas ya están en Drive.</p>')+
@@ -747,6 +800,7 @@ function accionVistas(act,b){
   if(act==="irplan"){S.fil={};go("planes");var el2=document.getElementById("plan_"+b.dataset.id);if(el2)el2.scrollIntoView({block:"start"});return true;}
   if(act==="guardarplan"){guardarPlan(b.dataset.id);return true;}
   if(act==="excel"){exportarExcel();return true;}
+  if(act==="excelres"){exportarResumen();return true;}
   if(act==="borrarlocal"){borrarLocal();return true;}
   if(act==="cancelconfirm2"){S.confirm=null;var h=$("#confirmLocal");if(h)h.innerHTML="";return true;}
   return false;}
