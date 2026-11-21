@@ -136,6 +136,11 @@ table.ind td.n{text-align:right;white-space:nowrap} table.ind th.n{text-align:ri
 .evo{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .evo>div{border:1px solid var(--line);border-radius:8px;padding:10px 10px 4px} .evo h4{margin:0 0 2px;font-size:14px;display:flex;justify-content:space-between} .evo h4 span{font-variant-numeric:tabular-nums}
 :root{--sv:#2e7d32;--sa:#f2c300;--sn:#ef6c00;--sr:#d43f4f}
+.sem{display:inline-flex;align-items:baseline;gap:6px;padding:3px 10px;border-radius:999px;font-weight:bold;white-space:nowrap;font-variant-numeric:tabular-nums;border:1px solid}
+.sem small{font-weight:normal;font-size:12px}
+.sem-sv{background:#d7ecd5;color:#1b5e20;border-color:#2e7d32}.sem-sa{background:#fff3bf;color:#5c4700;border-color:#d9ae00}
+.sem-sn{background:#ffe0c7;color:#8a3b00;border-color:#ef6c00}.sem-sr{background:#f9d4d7;color:#8e1d29;border-color:#d43f4f}.sem-sg{background:#eee;color:#555;border-color:#bbb}
+.kpi .sem{font-size:22px;padding:2px 12px}.dock .sem{font-size:15px}
 @media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.barra i.sr{background:repeating-linear-gradient(45deg,#d43f4f 0 3px,#fff 3px 5px)!important}.barra i.sa{outline:1px solid #8a6d00}.ley i{outline:1px solid #555}}
 
 .det{width:100%;display:flex;flex-direction:column;gap:8px;background:var(--sunken);border-radius:8px;padding:12px}
@@ -301,7 +306,7 @@ function vInicio(){
   function fila(a){var r=resumen(a),m=a.meta||{},es=estadoSync(a);var quien=m.funcionario||m.servicio||"";
     var chip=a.estado!=="finalizada"?'<span class="chip warn">En curso</span>':es==="subida"?'<span class="chip ok">Subida a Drive</span>':'<span class="chip bad">Pendiente de subir</span>';
     return '<div class="li"><div class="main"><h3>'+esc(a.formato.nombre)+'</h3><div class="row small muted">'+chip+'<span>'+esc(a.formato.carpeta||"")+'</span><span>'+esc(fechaCO(m.fecha))+(quien?' · '+esc(quien):'')+'</span><span>'+(a.fotos||[]).length+' fotos</span></div></div>'+
-      '<span class="pct">'+fmtPct(r.total.pct)+'</span><button type="button" data-act="'+(a.estado==="finalizada"?"ver":"continuar")+'" data-id="'+esc(a.id)+'">'+(a.estado==="finalizada"?"Ver":"Continuar")+'</button></div>';}
+      '<span class="pct">'+sem(r.total.pct,false)+'</span><button type="button" data-act="'+(a.estado==="finalizada"?"ver":"continuar")+'" data-id="'+esc(a.id)+'">'+(a.estado==="finalizada"?"Ver":"Continuar")+'</button></div>';}
   var syncTxt=S.syncing?esc(S.prog||"Sincronizando…"):pend?pend+(pend===1?" elemento pendiente de subir":" elementos pendientes de subir"):"Todo está en Drive";
   app.innerHTML='<section class="panel sync"><div class="st"><span class="small muted">Sincronización con Drive</span><b>'+syncTxt+'</b>'+
     '<span class="small muted">'+(S.lastSync?"Última: "+esc(fechaHora(S.lastSync)):"Aún no se ha sincronizado")+(online()?"":" · Conéctese a wifi para subir")+'</span>'+
@@ -371,7 +376,7 @@ function renderThumbs(c,i){var host=document.getElementById(c<0?"th_gen":"th_"+k
   Promise.all(fs.map(function(o){return thumbURL(o.p.id);})).then(function(urls){
     host.innerHTML=fs.map(function(o,j){return '<div class="thumb">'+(urls[j]?'<img alt="Evidencia" src="'+urls[j]+'">':'<span class="small muted" style="padding:6px">En Drive</span>')+'<button type="button" data-act="quitarfoto" data-ix="'+o.ix+'">Quitar</button></div>';}).join("");});}
 function dock(){if(S.view!=="auditar")return;var r=resumen(S.aud),T=r.total;
-  $("#dockHost").innerHTML='<div class="dock"><div class="stat"><span>Cumplimiento total · '+T.pend+' sin responder · se guarda solo en la tablet</span><b>'+fmtPct(T.pct)+' · Cumple '+T.si+(T.parcial?' · Parcial '+T.parcial:'')+' · No cumple '+T.no+' · NA '+T.na+'</b></div>'+
+  $("#dockHost").innerHTML='<div class="dock"><div class="stat"><span>Cumplimiento total · '+T.pend+' sin responder · se guarda solo en la tablet</span><b>'+sem(T.pct)+' · Cumple '+T.si+(T.parcial?' · Parcial '+T.parcial:'')+' · No cumple '+T.no+' · NA '+T.na+'</b></div>'+
   '<button type="button" class="pri" data-act="finalizar">Finalizar auditoría</button></div>';}
 var saveT=null;function guardarBorrador(){clearTimeout(saveT);saveT=setTimeout(function(){if(S.aud&&S.aud.estado!=="finalizada")guardarAud(S.aud);},400);}
 
@@ -432,7 +437,7 @@ function vVer(){var a=S.aud,f=a.formato,r=resumen(a),m=a.meta,es=estadoSync(a),u
     '<section class="panel"><div class="grid">'+dato("Fecha",fechaCO(m.fecha))+dato("Hora",m.horaInicio+" – "+m.horaFin)+dato("Evaluador",m.evaluador)+dato(etiqueta(f),m.funcionario)+dato("Servicio",m.servicio)+dato("Firmó",a.firmante)+
       Object.keys(m.extra||{}).map(function(x){return dato(x,/^\d{4}-\d{2}-\d{2}$/.test(m.extra[x])?fechaCO(m.extra[x]):m.extra[x]);}).join("")+'</div></section>'+
     '<section class="panel"><h3>Resultado</h3><div class="tw"><table class="sum"><thead><tr><th>Área</th><th>Cumple</th><th>Parcial</th><th>No cumple</th><th>NA</th><th>Sin resp.</th><th>% cumplimiento</th></tr></thead><tbody>'+filas+
-      '<tr><td><b>'+(f.columnas.length>1?'Total general':'Total')+'</b></td><td>'+r.total.si+'</td><td>'+r.total.parcial+'</td><td>'+r.total.no+'</td><td>'+r.total.na+'</td><td>'+r.total.pend+'</td><td><b>'+fmtPct(r.total.pct)+'</b></td></tr></tbody></table></div>'+
+      '<tr><td><b>'+(f.columnas.length>1?'Total general':'Total')+'</b></td><td>'+r.total.si+'</td><td>'+r.total.parcial+'</td><td>'+r.total.no+'</td><td>'+r.total.na+'</td><td>'+r.total.pend+'</td><td>'+sem(r.total.pct)+'</td></tr></tbody></table></div>'+
       '<p class="small muted">'+esc(metodo(f))+'.</p></section>'+alerta+
     '<section style="display:flex;flex-direction:column;gap:10px"><h2>No conformidades y observaciones ('+nos.length+')</h2>'+(nos.length?'<div class="list">'+nos.join("")+'</div>':'<div class="empty">Sin no conformidades.</div>')+'</section>'+
     (a.obsGeneral?'<section class="panel"><h3>Observaciones generales</h3><p>'+esc(a.obsGeneral).replace(/\n/g,"<br>")+'</p></section>':'')+
@@ -635,7 +640,7 @@ function vRegistro(){var todas=filasRegistro(),rows=filtrar(todas),hall=todosHal
           (r.evid?'<a class="btn" href="'+esc(r.evid)+'" target="_blank" rel="noopener">Fotos en Drive</a>':'')+
           (bajo?'<button type="button" data-act="irplan" data-id="'+esc(r.id)+'">Plan de mejora</button>':'')+'</div></div>';}
       return '<div class="li"><div class="main"><h3>'+esc(r.formato)+'</h3><div class="row small muted"><span>'+esc(fechaCO(r.fecha))+'</span><span>'+esc(r.evaluado||"—")+'</span><span>Auditor: '+esc(r.evaluador||"—")+'</span>'+chip+'</div></div>'+
-        '<span class="pct">'+fmtPct(r.pct)+'</span><button type="button" data-act="regsel" data-id="'+esc(r.id)+'" aria-expanded="'+sel+'">'+(sel?'Cerrar':'Detalle')+'</button>'+det+'</div>';}).join("")+'</div>'
+        '<span class="pct">'+sem(r.pct,false)+'</span><button type="button" data-act="regsel" data-id="'+esc(r.id)+'" aria-expanded="'+sel+'">'+(sel?'Cerrar':'Detalle')+'</button>'+det+'</div>';}).join("")+'</div>'
       :'<div class="empty">No hay auditorías con estos filtros.</div>')+'</section>';}
 
 /* ===================== Indicadores ===================== */
@@ -643,7 +648,7 @@ function agrupa(rows,fn){var g={},o=[];rows.forEach(function(r){var key=fn(r);if
   if(r.pct!==null&&r.pct!==undefined&&r.pct!==""){x.s+=Number(r.pct);x.c++;}if(bajoMeta(r))x.bajo++;});return o.map(function(key){var x=g[key];x.prom=x.c?x.s/x.c:null;return x;});}
 function tablaInd(titulo,etq,grupos,fmtK){if(!grupos.length)return '';var meta=metaGeneral();
   return '<section class="panel"><h3>'+esc(titulo)+'</h3><div class="tw"><table class="ind"><thead><tr><th>'+esc(etq)+'</th><th class="n">Auditorías</th><th class="n">Bajo meta</th><th class="n">Promedio</th><th style="width:30%"></th></tr></thead><tbody>'+
-    grupos.map(function(g){var w=g.prom===null?0:Math.max(0,Math.min(100,g.prom*100));return '<tr><td>'+esc(fmtK?fmtK(g.k):g.k)+'</td><td class="n">'+g.n+'</td><td class="n">'+g.bajo+'</td><td class="n"><b>'+fmtPct(g.prom)+'</b></td><td><div class="barra"><i class="'+(g.prom!==null&&g.prom<meta?'bajo':'')+'" style="width:'+w+'%"></i></div></td></tr>';}).join("")+'</tbody></table></div></section>';}
+    grupos.map(function(g){var w=g.prom===null?0:Math.max(0,Math.min(100,g.prom*100));return '<tr><td>'+esc(fmtK?fmtK(g.k):g.k)+'</td><td class="n">'+g.n+'</td><td class="n">'+g.bajo+'</td><td class="n">'+sem(g.prom)+'</td><td><div class="barra"><i class="'+semC(g.prom)+'" style="width:'+w+'%"></i></div></td></tr>';}).join("")+'</tbody></table></div></section>';}
 function fallas(rows){var ids={};rows.forEach(function(r){ids[r.id]=r;});var g={},o=[];
   todosHallazgos().forEach(function(h){if(h.resultado!=="No cumple"||!ids[h.id])return;var r=ids[h.id],key=r.formato+"|"+h.n+"|"+h.texto;if(!g[key]){g[key]={formato:r.formato,n:h.n,texto:h.texto,veces:0,evaluados:{}};o.push(key);}g[key].veces++;if(r.evaluado)g[key].evaluados[r.evaluado]=1;});
   return o.map(function(x){return g[x];}).sort(function(a,b){return b.veces-a.veces;});}
@@ -658,6 +663,7 @@ function datosIndicadores(rows){var proms=rows.filter(function(r){return r.pct!=
     servicio:agrupa(rows,function(r){return r.carpeta;}),fallas:fallas(rows).slice(0,20)};}
 /* ===================== Gráficas ===================== */
 function semC(p){if(p===null||p===undefined||p==="")return "sg";p=Math.round(Number(p)*10000)/10000;return p>=0.9?"sv":(p>=0.8?"sa":(p>0.5?"sn":"sr"));}
+function sem(p,conNivel){var c=semC(p);return '<span class="sem sem-'+c+'">'+fmtPct(p)+(conNivel!==false&&c!=="sg"?'<small>'+nivelTxt(p)+'</small>':'')+'</span>';}
 function nivelTxt(p){return {sv:"Satisfactorio",sa:"Aceptable",sn:"Insatisfactorio",sr:"Crítico",sg:""}[semC(p)];}
 function semHex(p){return {sv:"#2e7d32",sa:"#f2c300",sn:"#ef6c00",sr:"#d43f4f",sg:"#7a7a7a"}[semC(p)];}
 function leyendaSem(){return '<div class="ley"><span><i style="background:#2e7d32"></i>90 % o más · Satisfactorio</span><span><i style="background:#f2c300"></i>80 % a 89 % · Aceptable</span><span><i style="background:#ef6c00"></i>51 % a 79 % · Insatisfactorio</span><span><i style="background:#d43f4f"></i>50 % o menos · Crítico</span></div>';}
@@ -707,7 +713,7 @@ function graficasHtml(rows,D){var gran=S.gran||"semana";
 function vIndicadores(){var todas=filasRegistro(),rows=filtrar(todas),D=datosIndicadores(rows);
   app.innerHTML=cabecera("Indicadores de cumplimiento","Para presentar resultados")+sinDatosHtml()+filtrosHtml(todas)+
     '<section class="panel"><h3>Informe en PDF</h3><p class="small muted">'+((S.fil||{}).evaluado?'Informe de '+esc(S.fil.evaluado)+' con gráficas, análisis, detalle de auditorías y hallazgos.':'Elija un médico en "Evaluado / área" para su informe individual. Sin elegir, sale el informe general con una página por cada médico.')+' Use también Mes, Servicio o Tipo para acotarlo.</p><div class="row"><button type="button" class="pri" data-act="informe"'+(D.n?'':' disabled')+'>Generar informe en PDF</button></div></section>'+
-    '<section class="kpis"><div class="kpi"><span>Auditorías</span><b>'+D.n+'</b></div><div class="kpi"><span>Cumplimiento promedio</span><b>'+fmtPct(D.prom)+'</b></div>'+
+    '<section class="kpis"><div class="kpi"><span>Auditorías</span><b>'+D.n+'</b></div><div class="kpi"><span>Cumplimiento promedio</span><b>'+sem(D.prom)+'</b></div>'+
     '<div class="kpi"><span>Bajo la meta ('+fmtPct(metaGeneral())+')</span><b>'+D.bajos+'</b></div><div class="kpi"><span>Planes sin cerrar</span><b>'+D.abiertos+'</b></div></section>'+
     (D.n?graficasHtml(rows,D)+'<h2 style="margin-top:8px">Tablas</h2>'+tablaInd("Por tipo de auditoría","Tipo",agrupa(rows,function(r){return r.tipo;}))+tablaInd("Por servicio","Servicio",D.servicio)+tablaInd("Por mes","Mes",D.mes,mesTxt)+tablaInd("Por lista de chequeo","Lista de chequeo",D.lista)+tablaInd("Por evaluado o área","Evaluado / área",D.evaluado)+tablaInd("Por auditor(a)","Auditor(a)",D.auditor)+
       (D.fallas.length?'<section class="panel"><h3>Fallas más frecuentes</h3><div class="tw"><table class="ind"><thead><tr><th>Lista de chequeo</th><th>Ítem</th><th class="n">Veces</th><th class="n">Evaluados</th></tr></thead><tbody>'+
