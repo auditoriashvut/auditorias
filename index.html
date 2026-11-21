@@ -6,8 +6,8 @@
 <title>Auditorías HVUT</title>
 <meta name="theme-color" content="#262626">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icono-auditoria-192.png">
+<link rel="apple-touch-icon" href="icono-auditoria-192.png">
 <style>
 /* Herramienta de campo para tablet: barra institucional fija, una columna de trabajo, controles grandes para el dedo */
 :root{
@@ -571,16 +571,25 @@ function extraTxt(m){return Object.keys(m.extra||{}).filter(function(x){return m
 function hallLocales(a){var f=a.formato,r=resumen(a),out=[];f.items.forEach(function(it,i){f.columnas.forEach(function(col,c){var v=(a.resp||{})[k(c,i)],o=(a.obs||{})[k(c,i)],op=r.ops.find(function(x){return x.t===v;});
   var res=op&&op.v!==null?(op.v>=1?"Cumple":op.v<=0?"No cumple":"Parcial"):(v?"No aplica":"Sin responder");
   if(res==="No cumple"||res==="Parcial"||o)out.push({id:a.id,area:col,n:it.n,seccion:it.seccion,texto:it.texto,resp:v||"",resultado:res,obs:o||""});});});return out;}
+var ALIAS_LISTAS={"facturacion de consulta externa":"C-FAC","facturacion consulta":"C-FAC","facturacion hx":"H-FAC","facturacion hospitalizacion":"H-FAC",
+  "pertinencia historia clinica":"C-HC","historia clinica consulta":"C-HC","procedimiento de ingreso a turno de consulta":"C-ADH-03","ingreso a turno":"C-ADH-03",
+  "atencion de consulta":"C-ADH-04","bioseguridad consulta":"C-BIO","bioseguridad de consulta":"C-BIO","bioseguridad hospitalizacion":"H-BIO",
+  "adherencia 1 · ingreso del paciente desde consulta":"H-ADH-01","adherencia 2 · ingreso y atencion del paciente hospitalizado":"H-ADH-02","adherencia 3 · entrega y recibo de turno":"H-ADH-03",
+  "adherencia 4 · egreso por alta medica":"H-ADH-04A","adherencia 4 · egreso por fallecimiento":"H-ADH-04B","adherencia 4 · egreso por retiro voluntario":"H-ADH-04C"};
+function listaActual(nombre,fid){var fs=(S.conf&&S.conf.formatos)||[],f=fs.find(function(x){return x.id===fid;});if(f)return {nombre:f.nombre,id:f.id};
+  var n=sinT(nombre).replace(/^\d+(\.\d+)*\.?\s+/,"").replace(/\s+/g," ").trim(),id=ALIAS_LISTAS[n];
+  if(!id){var g=fs.find(function(x){return sinT(x.nombre)===n||sinT(x.nombre).split(" · ").pop()===n;});if(g)id=g.id;}
+  f=id&&fs.find(function(x){return x.id===id;});return f?{nombre:f.nombre,id:f.id}:{nombre:nombre,id:fid};}
 function filasRegistro(){var d=S.datos||{auditorias:[]},map={},out=[];
   (d.auditorias||[]).forEach(function(x){var r={id:x.id,fecha:x.fecha,mes:String(x.fecha).slice(0,7),carpeta:x.carpeta,formato:x.formato,formatoId:x.formatoId,
     evaluado:x.funcionario||x.servicio||"",funcionario:x.funcionario,servicio:x.servicio,evaluador:x.evaluador,pct:x.pct===""?null:x.pct,si:x.si,no:x.no,na:x.na,pend:x.pend,
-    pdf:x.pdf,evid:x.evid,obsGeneral:x.obsGeneral,extra:x.extra,areas:x.areas||[],enDrive:true};r.tipo=tipoDe(r.formato,r.formatoId);map[x.id]=r;out.push(r);});
+    pdf:x.pdf,evid:x.evid,obsGeneral:x.obsGeneral,extra:x.extra,areas:x.areas||[],enDrive:true};var la=listaActual(r.formato,r.formatoId);r.formato=la.nombre;r.formatoId=la.id;r.tipo=tipoDe(r.formato,r.formatoId);map[x.id]=r;out.push(r);});
   S.auds.forEach(function(a){if(a.estado!=="finalizada")return;if(map[a.id]){map[a.id].local=true;return;}
     if(S.datos&&a.sync&&a.sync.aud&&a.sync.fecha&&S.datos.generado&&String(S.datos.generado)>String(a.sync.fecha))return;/* ya se borró de Drive */
     var rr=resumen(a),m=a.meta;
     out.push({id:a.id,fecha:m.fecha,mes:m.fecha.slice(0,7),carpeta:a.formato.carpeta,formato:a.formato.nombre,formatoId:a.formato.id,evaluado:m.funcionario||m.servicio||"",
       funcionario:m.funcionario,servicio:m.servicio,evaluador:m.evaluador,pct:rr.total.pct,si:rr.total.si,no:rr.total.no,na:rr.total.na,pend:rr.total.pend,obsGeneral:a.obsGeneral,
-      extra:extraTxt(m),areas:a.formato.columnas.length>1?rr.cols.map(function(x){return {area:x.col,pct:x.pct};}):[],local:true,enDrive:false,tipo:tipoDe(a.formato.nombre,a.formato.id)});});
+      extra:extraTxt(m),areas:a.formato.columnas.length>1?rr.cols.map(function(x){return {area:x.col,pct:x.pct};}):[],local:true,enDrive:false});var la2=listaActual(out[out.length-1].formato,out[out.length-1].formatoId);out[out.length-1].formato=la2.nombre;out[out.length-1].formatoId=la2.id;out[out.length-1].tipo=tipoDe(la2.nombre,la2.id);});
   return out.sort(function(a,b){return String(b.fecha).localeCompare(String(a.fecha));});}
 function todosHallazgos(){var out=((S.datos&&S.datos.hallazgos)||[]).slice(),en={};((S.datos&&S.datos.auditorias)||[]).forEach(function(x){en[x.id]=1;});
   S.auds.forEach(function(a){if(a.estado==="finalizada"&&!en[a.id])out=out.concat(hallLocales(a));});return out;}
