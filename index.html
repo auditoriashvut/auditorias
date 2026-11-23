@@ -264,7 +264,7 @@ $("#btnHome").addEventListener("click",function(){go("inicio");});
 $("#btnAjustes").addEventListener("click",function(){go("ajustes");});
 function render(){$("#dockHost").innerHTML="";limpiarThumbs();
   if(S.view==="ajustes")return vAjustes();if(S.view==="inicio")return vInicio();
-  if(S.view==="registro")return vRegistro();if(S.view==="indicadores")return vIndicadores();if(S.view==="planes")return vPlanes();if(S.view==="exportar")return vExportar();if(S.view==="auditar")return vAuditar();if(S.view==="ver")return vVer();}
+  if(S.view==="registro")return vRegistro();if(S.view==="indicadores")return vIndicadores();if(S.view==="planes")return vPlanes();if(S.view==="exportar")return vExportar();if(S.view==="auditar")return vAuditar();if(S.view==="ver")return vVer();if(S.view==="firmar")return vFirmar();}
 function guardarAud(a){var i=S.auds.findIndex(function(x){return x.id===a.id;});if(i>=0)S.auds[i]=a;else S.auds.push(a);return DB.put("aud",clone(a));}
 
 /* ===================== ajustes ===================== */
@@ -442,7 +442,7 @@ function vVer(){var a=S.aud,f=a.formato,r=resumen(a),m=a.meta,es=estadoSync(a),u
     '<section style="display:flex;flex-direction:column;gap:10px"><h2>No conformidades y observaciones ('+nos.length+')</h2>'+(nos.length?'<div class="list">'+nos.join("")+'</div>':'<div class="empty">Sin no conformidades.</div>')+'</section>'+
     (a.obsGeneral?'<section class="panel"><h3>Observaciones generales</h3><p>'+esc(a.obsGeneral).replace(/\n/g,"<br>")+'</p></section>':'')+
     '<section class="panel"><h3>Evidencias ('+(a.fotos||[]).length+')</h3><div class="thumbs" id="th_all"></div></section>'+
-    (!a.firma?'<section class="panel"><h3>Firma pendiente del auditado</h3><p class="small muted">Para cuando el auditado no estaba presente al cerrar la auditoría (por ejemplo, en auditorías de tiempo vencido). Las respuestas y el % no cambian. Queda registrada la fecha y hora de la firma y, una vez guardada, la firma también queda bloqueada.</p>'+
+    (!a.firma&&!firmaEstado({id:a.id}).firmada?'<section class="panel"><h3>Firma pendiente del auditado</h3><p class="small muted">Para cuando el auditado no estaba presente al cerrar la auditoría (por ejemplo, en auditorías de tiempo vencido). Las respuestas y el % no cambian. Queda registrada la fecha y hora de la firma y, una vez guardada, la firma también queda bloqueada.</p>'+
       '<label class="f">Nombre de quien firma<input id="firmante" value="'+esc(a.firmante||m.funcionario||"")+'"></label>'+
       '<canvas class="sig" id="sig"></canvas><div class="row"><button type="button" data-act="limpiarfirma">Borrar trazo</button><button type="button" class="pri" data-act="firmapost">Guardar firma y bloquear</button></div><div id="confirmHost"></div></section>'
      :(a.firmaPosterior?'<section class="panel"><h3>Firma del auditado</h3><p>Firmada por <b>'+esc(a.firmaPosterior.firmante)+'</b> el '+esc(fechaHora(a.firmaPosterior.fecha))+', posterior al cierre de la auditoría. '+(a.firmaPosterior.pendiente?'Pendiente de subir a Drive.':'El PDF con la firma está en Drive, en la carpeta de evidencias.')+'</p></section>':''))+
@@ -452,13 +452,47 @@ function vVer(){var a=S.aud,f=a.formato,r=resumen(a),m=a.meta,es=estadoSync(a),u
       '<textarea id="notaTxt" placeholder="Ej.: En el ítem 7 se marcó NO por error; corresponde a SI según verificación del 27/10."></textarea>'+
       '<div class="row"><button type="button" data-act="nota">Agregar nota aclaratoria</button></div></section>'+
     '<section class="row"><button type="button" class="pri" data-act="pdf">Descargar PDF</button>'+(S.volverA&&S.volverA!=="inicio"?'<button type="button" data-act="volver">Volver</button>':'')+'</section>';
-  if(!a.firma)initSig();
+  if($("#sig"))initSig();
   var host=$("#th_all"),fs=a.fotos||[];Promise.all(fs.map(function(p){return thumbURL(p.id);})).then(function(urls){host.innerHTML=fs.length?fs.map(function(p,j){return '<div class="thumb">'+(urls[j]?'<img alt="Evidencia" src="'+urls[j]+'">':'<span class="small muted" style="padding:6px">En Drive</span>')+'</div>';}).join(""):'<span class="muted">Sin fotos.</span>';});}
 function agregarNota(){var t=($("#notaTxt").value||"").trim(),autor=$("#notaAutor").value;if(!autor){toast("Seleccione el autor de la nota.");return;}if(!t){toast("Escriba la nota.");return;}
   var a=S.aud;var n={id:uid(),auditId:a.id,texto:t,autor:autor,fecha:new Date().toISOString(),carpeta:a.formato.carpeta,formato:a.formato.nombre,quien:a.meta.funcionario||a.meta.servicio,dispositivo:S.cfg.dispositivo,synced:false};
   DB.put("notas",n).then(function(){S.notas.push(n);toast("Nota agregada.");vVer();if(online())sincronizar();});}
+function firmaEstado(r){var ns=((S.datos&&S.datos.notas)||[]).concat(S.notas||[]).filter(function(n){return n.auditId===r.id&&/^Firma del auditado \(/.test(n.texto||"");});
+  var la=S.auds.find(function(x){return x.id===r.id;});if(la&&la.firma)return {firmada:true,txt:la.firmaPosterior?"agregada el "+fechaHora(la.firmaPosterior.fecha)+" por "+la.firmaPosterior.firmante+", posterior al cierre.":"firmó al cierre ("+(la.firmante||"")+")."};
+  if(ns.length)return {firmada:true,txt:"agregada el "+fechaHora(ns[0].fecha)+", posterior al cierre (ver nota aclaratoria)."};return {firmada:false};}
+function vFirmar(){var r=S.firmaReg;if(!r){go("registro");return;}
+  app.innerHTML=cabecera("Firma del auditado","Auditoría ya subida a Drive")+
+    '<section class="panel"><h3>'+esc(r.formato)+'</h3><p>'+esc(fechaCO(r.fecha))+' · '+esc(r.evaluado||"—")+' · Auditor: '+esc(r.evaluador||"—")+' · '+sem(r.pct)+'</p>'+
+    '<p class="small muted">Use esta opción solo si el auditado <b>no firmó</b> al cerrar la auditoría (por ejemplo, en auditorías de tiempo vencido). La auditoría no se modifica: las respuestas y el % quedan iguales. Se guarda en Drive, en la carpeta de evidencias, una <b>constancia de firma</b> en PDF con la fecha y hora en que se firma, y queda una nota aclaratoria. Una vez guardada no se puede cambiar.</p>'+
+    '<label class="f">Nombre de quien firma<input id="firmante" value="'+esc(r.funcionario||r.evaluado||"")+'"></label>'+
+    '<canvas class="sig" id="sig"></canvas><div class="row"><button type="button" data-act="limpiarfirma">Borrar trazo</button><button type="button" class="pri" data-act="firmaregok">Guardar firma y bloquear</button><button type="button" data-act="firmaregno">Cancelar</button></div><div id="confirmHost"></div></section>';
+  initSig();}
+function constanciaFirmaPDF(r,nom,img,ahora){var doc=new window.jspdf.jsPDF({unit:"mm",format:"letter"}),W=doc.internal.pageSize.getWidth(),M=15,y;
+  doc.setFillColor(45,45,45);doc.rect(0,0,W,20,"F");try{doc.setFillColor(255,255,255);doc.rect(M-1,1.5,18,17,"F");doc.addImage("data:image/png;base64,"+LOGO_B64,"PNG",M,2,16,16);}catch(e){}
+  doc.setTextColor(255);doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("UNIVERSIDAD DEL TOLIMA",M+21,8.5);doc.setFont("helvetica","normal");doc.setFontSize(9);doc.text("Hospital Veterinario Bernardino Rodríguez Urrea — Auditoría y Control Interno",M+21,13.5);doc.setTextColor(0);
+  y=32;doc.setFont("helvetica","bold");doc.setFontSize(14);doc.text("Constancia de firma del auditado",M,y);y+=5;doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(90);doc.text("Firma posterior al cierre de la auditoría",M,y);doc.setTextColor(0);y+=6;
+  doc.autoTable({startY:y,theme:"grid",margin:{left:M,right:M},styles:{font:"helvetica",fontSize:9,cellPadding:2},columnStyles:{0:{cellWidth:55,fontStyle:"bold",fillColor:[235,235,235]}},
+    body:[["Lista de chequeo",r.formato],["Fecha de la auditoría",fechaCO(r.fecha)],["Evaluado",r.evaluado||""],["Auditor(a)",r.evaluador||""],["% de cumplimiento",fmtPct(r.pct)+(r.pct!==null&&r.pct!==undefined?" · "+nivelTxt(r.pct):"")],
+      ["Código de la auditoría",String(r.id)],["Firma registrada el",fechaHora(ahora)]]});
+  y=doc.lastAutoTable.finalY+8;doc.setFontSize(9);var t=doc.splitTextToSize("La auditoría fue finalizada y bloqueada antes de esta firma. La firma se registra después del cierre; las respuestas, observaciones y el porcentaje de cumplimiento no cambian. El PDF original de la auditoría se conserva sin modificaciones en Drive.",W-2*M);doc.text(t,M,y);y+=t.length*4.5+8;
+  if(img){var s2=Math.min(80/img.w,32/img.h);doc.addImage(img.data,"PNG",M,y,img.w*s2,img.h*s2);}y+=34;doc.setDrawColor(0);doc.line(M,y,M+85,y);
+  doc.setFont("helvetica","bold");doc.text("Firma del auditado",M,y+5);doc.setFont("helvetica","normal");doc.text(nom,M,y+10);
+  doc.setFontSize(7.5);doc.setTextColor(90);doc.text("Auditoría y Control Interno · HVUT · Constancia generada el "+fechaHora(ahora),M,doc.internal.pageSize.getHeight()-8);return doc.output("blob");}
+function firmaRegistro(){var r=S.firmaReg,cv=$("#sig"),nom=(($("#firmante")||{}).value||"").trim();
+  if(!cv||!S.sigDirty){toast("Falta la firma: pida al auditado que firme en el recuadro.",4000);return;}if(!nom){toast("Escriba el nombre de quien firma.");return;}
+  if(!online()){toast("Se necesita internet para guardar la firma en Drive.",4000);return;}if(!window.jspdf){toast("No cargó el generador de PDF. Recargue la app con internet.",4000);return;}
+  if(S.confirm!=="firmareg"){S.confirm="firmareg";$("#confirmHost").innerHTML='<div class="confirm"><b>¿Guardar la firma de '+esc(nom)+'?</b><p>Confirme que el auditado no firmó al cerrar la auditoría. Queda registrada con la fecha y hora de hoy y no se podrá cambiar.</p><div class="row"><button type="button" class="pri" data-act="firmaregok">Sí, guardar y bloquear</button><button type="button" data-act="cancelconfirm">Cancelar</button></div></div>';return;}
+  S.confirm=null;toast("Guardando la firma en Drive…",15000);var ahora=new Date().toISOString(),png;
+  new Promise(function(res){cv.toBlob(res,"image/png");}).then(function(b){png=b;return new Promise(function(res){var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){res({data:fr.result,w:im.naturalWidth,h:im.naturalHeight});};im.src=fr.result;};fr.readAsDataURL(b);});})
+  .then(function(img){var pdf=constanciaFirmaPDF(r,nom,img,ahora);return b64(png).then(function(d){return post({action:"archivo",auditId:r.id,nombre:"firma_auditado_posterior.png",mime:"image/png",data:d});})
+      .then(function(){return b64(pdf);}).then(function(d){return post({action:"archivo",auditId:r.id,nombre:"Constancia de firma del auditado.pdf",mime:"application/pdf",data:d});});})
+  .then(function(){var n={id:uid(),auditId:r.id,texto:"Firma del auditado ("+nom+") registrada el "+fechaHora(ahora)+", posterior al cierre de la auditoría. Las respuestas y el % de cumplimiento no cambian. La constancia de firma en PDF está en la carpeta de evidencias.",
+      autor:r.evaluador||"",fecha:ahora,carpeta:r.carpeta,formato:r.formato,quien:r.evaluado,dispositivo:S.cfg.dispositivo,synced:false};
+    return post({action:"nota",nota:n}).then(function(){n.synced=true;return DB.put("notas",n);}).then(function(){S.notas.push(n);});})
+  .then(function(){toast("Firma guardada en Drive.",4000);S.regSel=r.id;S.firmaReg=null;go("registro");})
+  .catch(function(e){toast("No se pudo guardar la firma: "+(e&&e.message||"sin conexión")+". Intente de nuevo.",6000);});}
 function firmaPosterior(){var a=S.aud,cv=$("#sig"),nom=(($("#firmante")||{}).value||"").trim();
-  if(a.firma){toast("Esta auditoría ya tiene firma.");return;}if(!cv||!S.sigDirty){toast("Falta la firma: pida al auditado que firme en el recuadro.",4000);return;}if(!nom){toast("Escriba el nombre de quien firma.");return;}
+  if(a.firma||firmaEstado({id:a.id}).firmada){toast("Esta auditoría ya tiene firma.");return;}if(!cv||!S.sigDirty){toast("Falta la firma: pida al auditado que firme en el recuadro.",4000);return;}if(!nom){toast("Escriba el nombre de quien firma.");return;}
   if(S.confirm!=="firmapost"){S.confirm="firmapost";$("#confirmHost").innerHTML='<div class="confirm"><b>¿Guardar la firma de '+esc(nom)+'?</b><p>Queda registrada con la fecha y hora de hoy, como firma posterior al cierre, y ya no se podrá cambiar.</p><div class="row"><button type="button" class="pri" data-act="firmapost">Sí, guardar y bloquear</button><button type="button" data-act="cancelconfirm">Cancelar</button></div></div>';return;}
   S.confirm=null;toast("Guardando la firma…",8000);var ahora=new Date().toISOString();
   new Promise(function(res){cv.toBlob(res,"image/png");}).then(function(b){return blobHash(b).then(function(h){var id="firma_"+a.id;return DB.put("blob",b,id).then(function(){
@@ -583,7 +617,7 @@ var LOGO_B64="iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAIAAACxN37FAADQaklEQVR4nOydZYAcx5
 var ESTADOS=["Abierto","En seguimiento","Cerrado"];
 function navMarcar(){var n=$("#nav");if(!n)return;n.hidden=!S.conf;
   var h=document.querySelector(".bar");if(h)document.documentElement.style.setProperty("--barh",h.offsetHeight+"px");
-  var actual=S.view==="auditar"||S.view==="ver"?(S.volverA&&S.view==="ver"?S.volverA:"inicio"):S.view;
+  var actual=S.view==="firmar"?"registro":S.view==="auditar"||S.view==="ver"?(S.volverA&&S.view==="ver"?S.volverA:"inicio"):S.view;
   Array.prototype.forEach.call(n.querySelectorAll("[data-nav]"),function(b){if(b.dataset.nav===actual)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});}
 function metaGeneral(){var m=S.conf&&S.conf.meta;return (m>0)?m:0.8;}
 function formatoDe(r){if(!S.conf)return null;return S.conf.formatos.find(function(f){return f.id===r.formatoId;})||S.conf.formatos.find(function(f){return f.nombre===r.formato;})||null;}
@@ -658,9 +692,11 @@ function vRegistro(){var todas=filasRegistro(),rows=filtrar(todas),hall=todosHal
           (hs.length?'<div class="list">'+hs.map(function(h){return '<div class="li"><div class="main"><b>'+esc(h.n)+'. '+esc(h.texto)+'</b><span class="small muted">'+(h.area&&h.area!=="General"?esc(h.area)+' · ':'')+esc(h.resultado)+(h.obs?' · '+esc(h.obs):'')+'</span></div></div>';}).join("")+'</div>':'<p class="small muted">Sin no conformidades.</p>')+
           (r.obsGeneral?'<p class="small"><b>Observaciones generales:</b> '+esc(r.obsGeneral)+'</p>':'')+
           (bajo?'<p class="small"><b>Plan de mejora:</b> '+(p?esc(p.estado||"Abierto")+(p.factor?' · '+esc(p.factor):''):'sin registrar')+'</p>':'')+
-          (function(){var la=S.auds.find(function(x){return x.id===r.id&&x.estado==="finalizada";});return la&&!la.firma?'<p class="small"><b>Firma del auditado:</b> pendiente. Puede agregarla con el botón <b>Agregar firma del auditado</b>; las respuestas y el % no cambian.</p>':(!la&&!r.local?'<p class="small muted">Si falta la firma del auditado, se agrega desde el equipo donde se hizo esta auditoría.</p>':'');})()+
-          '<div class="row">'+(function(){var la=S.auds.find(function(x){return x.id===r.id&&x.estado==="finalizada";});return (r.local||la)?(la&&!la.firma?'<button type="button" class="pri" data-act="ver" data-id="'+esc(r.id)+'">Agregar firma del auditado</button>':'<button type="button" class="pri" data-act="ver" data-id="'+esc(r.id)+'">Ver auditoría completa</button>'):'';})()+
-          (r.pdf?'<a class="btn" href="'+esc(r.pdf)+'" target="_blank" rel="noopener">Abrir PDF con fotos y firmas</a>':'')+
+          (function(){var est=firmaEstado(r);return est.firmada?'<p class="small"><b>Firma del auditado:</b> '+esc(est.txt)+'</p>':'';})()+
+          '<div class="row">'+(function(){var la=S.auds.find(function(x){return x.id===r.id&&x.estado==="finalizada";}),est=firmaEstado(r),h='';
+            if(la)h+='<button type="button" class="pri" data-act="ver" data-id="'+esc(r.id)+'">'+(la.firma||est.firmada?'Ver auditoría completa':'Agregar firma del auditado')+'</button>';
+            else if(r.local)h+='<button type="button" class="pri" data-act="ver" data-id="'+esc(r.id)+'">Ver auditoría completa</button>';
+            else if(r.enDrive&&!est.firmada)h+='<button type="button" data-act="firmareg" data-id="'+esc(r.id)+'">Agregar firma del auditado</button>';return h;})()+(r.pdf?'<a class="btn" href="'+esc(r.pdf)+'" target="_blank" rel="noopener">Abrir PDF con fotos y firmas</a>':'')+
           (r.evid?'<a class="btn" href="'+esc(r.evid)+'" target="_blank" rel="noopener">Fotos en Drive</a>':'')+
           (bajo?'<button type="button" data-act="irplan" data-id="'+esc(r.id)+'">Plan de mejora</button>':'')+'</div></div>';}
       return '<div class="li"><div class="main"><h3>'+esc(r.formato)+'</h3><div class="row small muted"><span>'+esc(fechaCO(r.fecha))+'</span><span>'+esc(r.evaluado||"—")+'</span><span>Auditor: '+esc(r.evaluador||"—")+'</span>'+chip+'</div></div>'+
@@ -996,6 +1032,8 @@ function borrarLocal(){var host=$("#confirmLocal");if(S.confirm!=="borrarlocal")
   S.notas.forEach(function(n){chain=chain.then(function(){return DB.del("notas",n.id);});});
   chain.then(function(){S.auds=[];S.notas=[];toast("Auditorías de la tablet borradas.");go("ajustes");});}
 function accionVistas(act,b){
+  if(act==="firmareg"){S.firmaReg=filasRegistro().find(function(x){return x.id===b.dataset.id;});go("firmar");return true;}
+  if(S.view==="firmar"){if(act==="limpiarfirma"){initSig();return true;}if(act==="firmaregok"){firmaRegistro();return true;}if(act==="firmaregno"){S.firmaReg=null;go("registro");return true;}if(act==="cancelconfirm"){S.confirm=null;$("#confirmHost").innerHTML="";return true;}}
   if(act==="regsel"){S.regSel=S.regSel===b.dataset.id?null:b.dataset.id;vRegistro();var el=b.closest(".li");return true;}
   if(act==="limpiarfil"){S.fil={};S.regSel=null;render();return true;}
   if(act==="gran"){S.gran=b.dataset.v;render();return true;}
