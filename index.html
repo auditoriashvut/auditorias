@@ -442,16 +442,33 @@ function vVer(){var a=S.aud,f=a.formato,r=resumen(a),m=a.meta,es=estadoSync(a),u
     '<section style="display:flex;flex-direction:column;gap:10px"><h2>No conformidades y observaciones ('+nos.length+')</h2>'+(nos.length?'<div class="list">'+nos.join("")+'</div>':'<div class="empty">Sin no conformidades.</div>')+'</section>'+
     (a.obsGeneral?'<section class="panel"><h3>Observaciones generales</h3><p>'+esc(a.obsGeneral).replace(/\n/g,"<br>")+'</p></section>':'')+
     '<section class="panel"><h3>Evidencias ('+(a.fotos||[]).length+')</h3><div class="thumbs" id="th_all"></div></section>'+
+    (!a.firma?'<section class="panel"><h3>Firma pendiente del auditado</h3><p class="small muted">Para cuando el auditado no estaba presente al cerrar la auditoría (por ejemplo, en auditorías de tiempo vencido). Las respuestas y el % no cambian. Queda registrada la fecha y hora de la firma y, una vez guardada, la firma también queda bloqueada.</p>'+
+      '<label class="f">Nombre de quien firma<input id="firmante" value="'+esc(a.firmante||m.funcionario||"")+'"></label>'+
+      '<canvas class="sig" id="sig"></canvas><div class="row"><button type="button" data-act="limpiarfirma">Borrar trazo</button><button type="button" class="pri" data-act="firmapost">Guardar firma y bloquear</button></div><div id="confirmHost"></div></section>'
+     :(a.firmaPosterior?'<section class="panel"><h3>Firma del auditado</h3><p>Firmada por <b>'+esc(a.firmaPosterior.firmante)+'</b> el '+esc(fechaHora(a.firmaPosterior.fecha))+', posterior al cierre de la auditoría. '+(a.firmaPosterior.pendiente?'Pendiente de subir a Drive.':'El PDF con la firma está en Drive, en la carpeta de evidencias.')+'</p></section>':''))+
     '<section class="panel"><h3>Notas aclaratorias</h3><p class="small muted">La auditoría no se modifica. Si hay un error, deje aquí la aclaración: queda con fecha, hora y autor, y se sube a Drive.</p>'+
       notas.map(function(n){return '<div class="nota"><div class="small muted">'+esc(fechaHora(n.fecha))+' · '+esc(n.autor)+(n.synced?' · en Drive':' · pendiente de subir')+'</div><div>'+esc(n.texto).replace(/\n/g,"<br>")+'</div></div>';}).join("")+
       '<div class="grid"><label class="f">Autor de la nota<select id="notaAutor">'+opcionesPersonal("auditor","")+'</select></label></div>'+
       '<textarea id="notaTxt" placeholder="Ej.: En el ítem 7 se marcó NO por error; corresponde a SI según verificación del 27/10."></textarea>'+
       '<div class="row"><button type="button" data-act="nota">Agregar nota aclaratoria</button></div></section>'+
     '<section class="row"><button type="button" class="pri" data-act="pdf">Descargar PDF</button>'+(S.volverA&&S.volverA!=="inicio"?'<button type="button" data-act="volver">Volver</button>':'')+'</section>';
+  if(!a.firma)initSig();
   var host=$("#th_all"),fs=a.fotos||[];Promise.all(fs.map(function(p){return thumbURL(p.id);})).then(function(urls){host.innerHTML=fs.length?fs.map(function(p,j){return '<div class="thumb">'+(urls[j]?'<img alt="Evidencia" src="'+urls[j]+'">':'<span class="small muted" style="padding:6px">En Drive</span>')+'</div>';}).join(""):'<span class="muted">Sin fotos.</span>';});}
 function agregarNota(){var t=($("#notaTxt").value||"").trim(),autor=$("#notaAutor").value;if(!autor){toast("Seleccione el autor de la nota.");return;}if(!t){toast("Escriba la nota.");return;}
   var a=S.aud;var n={id:uid(),auditId:a.id,texto:t,autor:autor,fecha:new Date().toISOString(),carpeta:a.formato.carpeta,formato:a.formato.nombre,quien:a.meta.funcionario||a.meta.servicio,dispositivo:S.cfg.dispositivo,synced:false};
   DB.put("notas",n).then(function(){S.notas.push(n);toast("Nota agregada.");vVer();if(online())sincronizar();});}
+function firmaPosterior(){var a=S.aud,cv=$("#sig"),nom=(($("#firmante")||{}).value||"").trim();
+  if(a.firma){toast("Esta auditoría ya tiene firma.");return;}if(!cv||!S.sigDirty){toast("Falta la firma: pida al auditado que firme en el recuadro.",4000);return;}if(!nom){toast("Escriba el nombre de quien firma.");return;}
+  if(S.confirm!=="firmapost"){S.confirm="firmapost";$("#confirmHost").innerHTML='<div class="confirm"><b>¿Guardar la firma de '+esc(nom)+'?</b><p>Queda registrada con la fecha y hora de hoy, como firma posterior al cierre, y ya no se podrá cambiar.</p><div class="row"><button type="button" class="pri" data-act="firmapost">Sí, guardar y bloquear</button><button type="button" data-act="cancelconfirm">Cancelar</button></div></div>';return;}
+  S.confirm=null;toast("Guardando la firma…",8000);var ahora=new Date().toISOString();
+  new Promise(function(res){cv.toBlob(res,"image/png");}).then(function(b){return blobHash(b).then(function(h){var id="firma_"+a.id;return DB.put("blob",b,id).then(function(){
+      a.firma={id:id,h:h};a.firmante=nom;a.firmaPosterior={fecha:ahora,firmante:nom,h:h,pendiente:!!(a.sync&&a.sync.aud)};return construirPDF(a);});});})
+  .then(function(pdf){return DB.put("blob",pdf,"pdf_"+a.id);})
+  .then(function(){var n={id:uid(),auditId:a.id,texto:"Firma del auditado ("+nom+") registrada el "+fechaHora(ahora)+", posterior al cierre de la auditoría. Las respuestas y el % de cumplimiento no cambian. Se adjunta en evidencias el PDF con la firma.",
+      autor:a.meta.evaluador||"",fecha:ahora,carpeta:a.formato.carpeta,formato:a.formato.nombre,quien:a.meta.funcionario||a.meta.servicio,dispositivo:S.cfg.dispositivo,synced:false};
+    return DB.put("notas",n).then(function(){S.notas.push(n);return guardarAud(a);});})
+  .then(function(){toast("Firma guardada y bloqueada.",3500);vVer();if(online())sincronizar();})
+  .catch(function(e){toast("No se pudo guardar la firma: "+(e&&e.message),5000);});}
 function nombreDoc(a){var f=a.formato,m=a.meta,q=m.funcionario||m.servicio;return (m.fecha+" · "+f.nombre+(q?" · "+q:"")).replace(/[\\\/:*?"<>|]/g,"-");}
 function descargarPDF(){var a=S.aud;DB.get("blob","pdf_"+a.id).then(function(b){if(!b){toast("El PDF ya no está en la tablet; búsquelo en Drive.",4000);return;}
   var url=URL.createObjectURL(b),l=document.createElement("a");l.href=url;
@@ -517,6 +534,7 @@ function construirPDF(a){
       y+=30;doc.setDrawColor(0);doc.line(M,y,M+bw,y);doc.line(M+bw+10,y,W-M,y);
       doc.setFont("helvetica","bold");doc.setFontSize(9);doc.text("Firma del auditado",M,y+4.5);doc.text("Firma del auditor(a)",M+bw+10,y+4.5);
       doc.setFont("helvetica","normal");doc.text(a.firmante||m.funcionario||"",M,y+9);doc.text(m.evaluador||"",M+bw+10,y+9);
+      if(a.firmaPosterior){doc.setFontSize(7.5);doc.setTextColor(60);doc.text(doc.splitTextToSize("Firma registrada el "+fechaHora(a.firmaPosterior.fecha)+", posterior al cierre de la auditoría ("+fechaHora(a.finalizado)+"). Respuestas y % sin cambios.",bw),M,y+13);doc.setTextColor(0);}
       var n=doc.getNumberOfPages();for(var p=1;p<=n;p++){doc.setPage(p);doc.setFontSize(7.5);doc.setTextColor(90);
         doc.text("Huella: "+huellaCorta(a.huella)+"  ·  Finalizada "+fechaHora(a.finalizado)+"  ·  Documento bloqueado, no editable",M,H-6);doc.text("Página "+p+" de "+n,W-M,H-6,{align:"right"});}
       return doc.output("blob");});});}
@@ -543,6 +561,11 @@ function sincronizar(){if(S.syncing||!S.cfg)return;if(!online()){toast("Sin cone
         return DB.get("blob",fi.id).then(function(b){if(!b){a.sync.files[fi.id]=true;return;}return b64(b).then(function(d){return post({action:"archivo",auditId:a.id,nombre:fi.nombre,mime:fi.mime,data:d});}).then(function(){a.sync.files[fi.id]=true;});})
           .then(function(){paso("Subiendo fotos…");return guardarAud(a);});});});
       return p1.then(function(){a.sync.ok=true;a.sync.fecha=new Date().toISOString();return guardarAud(a);});}).catch(function(e){err=e;});});
+  S.auds.filter(function(a){return a.firmaPosterior&&a.firmaPosterior.pendiente;}).forEach(function(a0){chain=chain.then(function(){if(err)return;var a=S.auds.find(function(x){return x.id===a0.id;});
+      if(!a.sync||!a.sync.ok)return;setProg("Subiendo firma posterior…",100);
+      return DB.get("blob",a.firma.id).then(function(b){return b?b64(b).then(function(d){return post({action:"archivo",auditId:a.id,nombre:"firma_auditado.png",mime:"image/png",data:d});}):null;})
+        .then(function(){return DB.get("blob","pdf_"+a.id);}).then(function(b){return b?b64(b).then(function(d){return post({action:"archivo",auditId:a.id,nombre:"PDF con firma del auditado.pdf",mime:"application/pdf",data:d});}):null;})
+        .then(function(){a.firmaPosterior.pendiente=false;a.sync.files[a.firma.id]=true;return guardarAud(a);});}).catch(function(e){err=e;});});
   notas.forEach(function(n){chain=chain.then(function(){if(err)return;return post({action:"nota",nota:n}).then(function(){n.synced=true;paso("Notas subidas");return DB.put("notas",n);});}).catch(function(e){err=e;});});
   chain=chain.then(function(){if(err)return;return subirPlanes();}).catch(function(e){err=e;});
   chain=chain.then(function(){if(err)return;setProg("Actualizando registro e indicadores…",100);return descargarDatos();}).catch(function(e){err=e;});
@@ -991,7 +1014,7 @@ document.addEventListener("click",function(e){var nv=e.target.closest("[data-nav
   if(act==="conectar")return conectar();if(act==="liberar")return liberarEspacio();if(act==="sync")return sincronizar();
   if(act==="grupo"){var g=b.dataset.g;S.carpetaAbierta=(S.carpetaAbierta===g)?null:g;return vInicio();}
   if(act==="nueva")return nuevaAuditoria(b.dataset.id);if(act==="continuar"||act==="ver")return abrir(b.dataset.id);
-  if(S.view==="ver"){if(act==="pdf")return descargarPDF();if(act==="nota")return agregarNota();if(act==="volver")return go(S.volverA||"inicio");return;}
+  if(S.view==="ver"){if(act==="limpiarfirma")return initSig();if(act==="firmapost")return firmaPosterior();if(act==="cancelconfirm"){S.confirm=null;$("#confirmHost").innerHTML="";return;}if(act==="pdf")return descargarPDF();if(act==="nota")return agregarNota();if(act==="volver")return go(S.volverA||"inicio");return;}
   if(!S.aud||S.aud.estado==="finalizada")return;
   if(act==="area"){S.area=+b.dataset.c;renderTabs();renderItems();var t=$("#tabs");if(t)window.scrollTo({top:t.offsetTop-70});return;}
   if(act==="resp"){var i=+b.dataset.i,key=k(S.area,i);var ta=document.getElementById("obs_"+key);if(ta)S.aud.obs[key]=ta.value;

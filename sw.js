@@ -1,5 +1,5 @@
 /* Auditorías HVUT — funcionamiento sin internet */
-var CACHE="auditorias-hvut-v3-13";
+var CACHE="auditorias-hvut-v3-14";
 var LOCAL=["./","index.html","manifest.webmanifest","icono-auditoria-192.png","icono-auditoria-512.png"];
 var CDN=["https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
          "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js",
