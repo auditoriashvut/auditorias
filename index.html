@@ -661,7 +661,9 @@ function mesTxt(m){var n=["enero","febrero","marzo","abril","mayo","junio","juli
 function filtrar(rows,ign){var F=S.fil||{};return rows.filter(function(r){
   if(F.carpeta&&r.carpeta!==F.carpeta)return false;if(F.tipo&&r.tipo!==F.tipo)return false;if(F.formato&&r.formato!==F.formato)return false;
   if(ign!=="mes"){if(F.mes&&r.mes!==F.mes)return false;}else{if(F.desde&&r.mes<F.desde)return false;if(F.hasta&&r.mes>F.hasta)return false;}
+  var fe=String(r.fecha||"").slice(0,10);if(F.fdesde&&fe<F.fdesde)return false;if(F.fhasta&&fe>F.fhasta)return false;
   if(F.evaluado&&r.evaluado!==F.evaluado)return false;if(F.evaluador&&r.evaluador!==F.evaluador)return false;return true;});}
+function fechaF(campo,etq){var v=(S.fil||{})[campo]||"";return '<label class="f">'+esc(etq)+'<input type="date" data-fil="'+campo+'" value="'+esc(v)+'"></label>';}
 function selF(campo,etq,vals,fmt){var v=(S.fil||{})[campo]||"";return '<label class="f">'+esc(etq)+'<select data-fil="'+campo+'"><option value="">Todos</option>'+
   vals.map(function(x){return '<option value="'+esc(x)+'"'+(x===v?' selected':'')+'>'+esc(fmt?fmt(x):x)+'</option>';}).join("")+'</select></label>';}
 function filtrosHtml(rows,rango){var base=rows,F=S.fil||{};var meses=unicos(base,"mes").reverse();
@@ -671,9 +673,9 @@ function filtrosHtml(rows,rango){var base=rows,F=S.fil||{};var meses=unicos(base
   var tipos=["Cumplimiento","Adherencia","Pertinencia","Bioseguridad"];
   var carps={};((S.conf&&S.conf.formatos)||[]).forEach(function(f){carps[f.carpeta]=1;});unicos(base,"carpeta").forEach(function(c){carps[c]=1;});
   return '<section class="panel"><div class="filtros">'+selF("carpeta","Servicio",Object.keys(carps).sort())+selF("tipo","Tipo de auditoría",tipos)+selF("formato","Lista de chequeo",fmts)+
-    (rango?selF("desde","Desde",meses,mesTxt)+selF("hasta","Hasta",meses,mesTxt):selF("mes","Mes",meses,mesTxt))+
+    (rango?selF("desde","Desde",meses,mesTxt)+selF("hasta","Hasta",meses,mesTxt):selF("mes","Mes",meses,mesTxt))+fechaF("fdesde","Fecha desde")+fechaF("fhasta","Fecha hasta")+
     selF("evaluado","Evaluado / área",unicos(base,"evaluado"))+selF("evaluador","Auditor(a)",unicos(base,"evaluador"))+'</div>'+
-    ((F.carpeta||F.tipo||F.formato||F.mes||F.desde||F.hasta||F.evaluado||F.evaluador)?'<div class="row"><button type="button" class="ghost" data-act="limpiarfil">Quitar filtros</button></div>':'')+'</section>';}
+    ((F.carpeta||F.tipo||F.formato||F.mes||F.desde||F.hasta||F.fdesde||F.fhasta||F.evaluado||F.evaluador)?'<div class="row"><button type="button" class="ghost" data-act="limpiarfil">Quitar filtros</button></div>':'')+'</section>';}
 function sinDatosHtml(){return S.datos?'':'<div class="empty">Aún no se ha descargado el registro de Drive. Toque <b>Sincronizar</b> en la pestaña Auditar con conexión a internet. Mientras tanto se muestran solo las auditorías de esta tablet.</div>';}
 function cabecera(t,sub){return '<section style="display:flex;flex-direction:column;gap:6px"><h2>'+esc(sub)+'</h2><h1>'+esc(t)+'</h1>'+
   (S.datos?'<p class="small muted">Datos de Drive al '+esc(fechaHora(S.datos.generado))+' · se actualizan al sincronizar</p>':'')+'</section>';}
@@ -772,7 +774,7 @@ function graficasHtml(rows,D){var gran=S.gran||"semana";
       return '<div class="gfila"><span>'+esc(x.texto)+' <small>· '+esc(x.formato)+'</small></span><div class="barra"><i class="sg" style="width:'+Math.max(4,x.veces/mx*100)+'%"></i></div><b>'+x.veces+'</b></div>';}).join("")+'</div></section>':'');}
 function vIndicadores(){var todas=filasRegistro(),rows=filtrar(todas),D=datosIndicadores(rows);
   app.innerHTML=cabecera("Indicadores de cumplimiento","Para presentar resultados")+sinDatosHtml()+filtrosHtml(todas)+
-    '<section class="panel"><h3>Informe en PDF</h3><p class="small muted">'+((S.fil||{}).evaluado?'Informe de '+esc(S.fil.evaluado)+' con gráficas, análisis, detalle de auditorías y hallazgos.':'Elija un médico en "Evaluado / área" para su informe individual. Sin elegir, sale el informe general con una página por cada médico.')+' Use también Mes, Servicio o Tipo para acotarlo.</p><div class="row"><button type="button" class="pri" data-act="informe"'+(D.n?'':' disabled')+'>Generar informe en PDF</button></div></section>'+
+    '<section class="panel"><h3>Informe en PDF</h3><p class="small muted">'+((S.fil||{}).evaluado?'Informe de '+esc(S.fil.evaluado)+' con gráficas, análisis, detalle de auditorías y hallazgos.':'Elija un médico en "Evaluado / área" para su informe individual. Sin elegir, sale el informe general con una página por cada médico.')+' Use también Mes, Fecha desde / hasta, Servicio o Tipo para acotarlo.</p><div class="row"><button type="button" class="pri" data-act="informe"'+(D.n?'':' disabled')+'>Generar informe en PDF</button></div></section>'+
     '<section class="kpis"><div class="kpi"><span>Auditorías</span><b>'+D.n+'</b></div><div class="kpi"><span>Cumplimiento promedio</span><b>'+sem(D.prom)+'</b></div>'+
     '<div class="kpi"><span>Bajo la meta ('+fmtPct(metaGeneral())+')</span><b>'+D.bajos+'</b></div><div class="kpi"><span>Planes sin cerrar</span><b>'+D.abiertos+'</b></div></section>'+
     (D.n?graficasHtml(rows,D)+'<h2 style="margin-top:8px">Tablas</h2>'+tablaInd("Por tipo de auditoría","Tipo",agrupa(rows,function(r){return r.tipo;}))+tablaInd("Por servicio","Servicio",D.servicio)+tablaInd("Por mes","Mes",D.mes,mesTxt)+tablaInd("Por lista de chequeo","Lista de chequeo",D.lista)+tablaInd("Por evaluado o área","Evaluado / área",D.evaluado)+tablaInd("Por auditor(a)","Auditor(a)",D.auditor)+
@@ -782,7 +784,7 @@ function vIndicadores(){var todas=filasRegistro(),rows=filtrar(todas),D=datosInd
 
 /* ===================== Informe en PDF (por médico) ===================== */
 function tratoDe(n){var pri=sinT(String(n||"").split(" ")[0]);return TRATO[pri]?TRATO[pri]+" ":"";}
-function periodoTxt(rows){var F=S.fil||{};if(F.mes)return mesTxt(F.mes);var fs=rows.map(function(r){return String(r.fecha).slice(0,10);}).filter(Boolean).sort();
+function periodoTxt(rows){var F=S.fil||{};if(F.fdesde||F.fhasta)return (F.fdesde&&F.fhasta?"del "+fechaCO(F.fdesde)+" al "+fechaCO(F.fhasta):F.fdesde?"desde el "+fechaCO(F.fdesde):"hasta el "+fechaCO(F.fhasta))+(F.mes?" ("+mesTxt(F.mes)+")":"");if(F.mes)return mesTxt(F.mes);var fs=rows.map(function(r){return String(r.fecha).slice(0,10);}).filter(Boolean).sort();
   return fs.length?(fs[0]===fs[fs.length-1]?fechaCO(fs[0]):"del "+fechaCO(fs[0])+" al "+fechaCO(fs[fs.length-1])):"";}
 function rgbDe(p){var h=semHex(p).slice(1);return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
 function pctTxt(p){return fmtPct(p);}
